@@ -1,4 +1,5 @@
 #include "chacha20.h"
+#include <cstdint>
 #include <cstring>
 
 ChaCha20::ChaCha20(const uint8_t key[32], const uint8_t nonce[12]) : counter(0) {
@@ -10,8 +11,8 @@ ChaCha20::ChaCha20(const uint8_t key[32], const uint8_t nonce[12]) : counter(0) 
 
     // Key
     for (int i = 0; i < 8; ++i) {
-        state[4 + i] = ((uint32_t)key[i*4 + 0]      ) |
-                       ((uint32_t)key[i*4 + 1] << 8 ) |
+        state[4 + i] = ((uint32_t)key[i*4 + 0]) |
+                       ((uint32_t)key[i*4 + 1] << 8) |
                        ((uint32_t)key[i*4 + 2] << 16) |
                        ((uint32_t)key[i*4 + 3] << 24);
     }
@@ -20,16 +21,18 @@ ChaCha20::ChaCha20(const uint8_t key[32], const uint8_t nonce[12]) : counter(0) 
     state[12] = counter;
 
     // Nonce
-    state[13] = ((uint32_t)nonce[0]      ) |
-                ((uint32_t)nonce[1] << 8 ) |
+    state[13] = ((uint32_t)nonce[0]) |
+                ((uint32_t)nonce[1] << 8) |
                 ((uint32_t)nonce[2] << 16) |
                 ((uint32_t)nonce[3] << 24);
-    state[14] = ((uint32_t)nonce[4]      ) |
-                ((uint32_t)nonce[5] << 8 ) |
+
+    state[14] = ((uint32_t)nonce[4]) |
+                ((uint32_t)nonce[5] << 8) |
                 ((uint32_t)nonce[6] << 16) |
                 ((uint32_t)nonce[7] << 24);
-    state[15] = ((uint32_t)nonce[8]      ) |
-                ((uint32_t)nonce[9] << 8 ) |
+
+    state[15] = ((uint32_t)nonce[8]) |
+                ((uint32_t)nonce[9] << 8) |
                 ((uint32_t)nonce[10] << 16) |
                 ((uint32_t)nonce[11] << 24);
 }
@@ -41,20 +44,27 @@ void ChaCha20::quarter_round(uint32_t& a, uint32_t& b, uint32_t& c, uint32_t& d)
     c += d; b ^= c; b = (b << 7) | (b >> 25);
 }
 
+void ChaCha20::encrypt_inplace(std::vector<uint8_t>& buffer) {
+    encrypt(buffer.data(), buffer.size());
+}
+
 void ChaCha20::chacha_block(uint32_t output[16]) {
     std::memcpy(output, state, 64);
+
     for (int i = 0; i < 10; ++i) {
-        // column rounds
+        // Column rounds
         quarter_round(output[0], output[4], output[8], output[12]);
         quarter_round(output[1], output[5], output[9], output[13]);
         quarter_round(output[2], output[6], output[10], output[14]);
         quarter_round(output[3], output[7], output[11], output[15]);
-        // diagonal rounds
+
+        // Diagonal rounds
         quarter_round(output[0], output[5], output[10], output[15]);
         quarter_round(output[1], output[6], output[11], output[12]);
         quarter_round(output[2], output[7], output[8], output[13]);
         quarter_round(output[3], output[4], output[9], output[14]);
     }
+
     for (int i = 0; i < 16; ++i) {
         output[i] += state[i];
     }

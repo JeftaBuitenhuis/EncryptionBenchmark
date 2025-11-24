@@ -18,6 +18,9 @@ extern "C" {
 #include "aes.h"
 }
 #include "chacha20.h"
+#include "chacha20poly1305.h"
+#include "chacha20_sodium.h"
+#include "aes_sodium.h"
 
 void benchmark_aes(std::vector<uint8_t>& buffer, const uint8_t key[16]) {
     AES_ctx ctx;
@@ -38,7 +41,7 @@ void benchmark_chacha20(std::vector<uint8_t>& buffer, const uint8_t key[32], con
     ChaCha20 ctx(key, nonce);
 
     unsigned long long start = rdtsc();
-    ctx.encrypt(buffer.data(), buffer.size());
+    ctx.encrypt_inplace(buffer);
     unsigned long long end = rdtsc();
 
     size_t bytes = buffer.size();
@@ -46,8 +49,46 @@ void benchmark_chacha20(std::vector<uint8_t>& buffer, const uint8_t key[32], con
     std::cout << "ChaCha20 cycles per byte: " << double(end - start) / bytes << "\n";
 }
 
+void benchmark_chacha20_poly1305(std::vector<uint8_t>& buffer,
+                                 const uint8_t key[32],
+                                 const uint8_t nonce[12]) {
+    ChaCha20Poly1305 ctx(key, nonce);
+
+    unsigned long long start = rdtsc();
+    ctx.encrypt_inplace(buffer);  // measures actual AEAD encryption
+    unsigned long long end = rdtsc();
+
+    size_t bytes = buffer.size() - 16; // exclude tag
+    std::cout << "ChaCha20Poly1305 cycles total: " << (end - start) << "\n";
+    std::cout << "ChaCha20Poly1305 cycles per byte: " << double(end - start) / bytes << "\n";
+}
+
+void benchmark_chacha20_sodium(std::vector<uint8_t>& buffer, const uint8_t key[32], const uint8_t nonce[12]) {
+    ChaCha20Sodium ctx(key, nonce);
+
+    unsigned long long start = rdtsc();
+    ctx.encrypt_inplace(buffer);
+    unsigned long long end = rdtsc();
+
+    size_t bytes = buffer.size();
+    std::cout << "ChaCha20 Sodium cycles total: " << (end - start) << "\n";
+    std::cout << "ChaCha20 Sodium cycles per byte: " << double(end - start) / bytes << "\n";
+}
+
+void benchmark_aes_sodium(std::vector<uint8_t>& buffer, const uint8_t key[32], const uint8_t nonce[16]) {
+    AES_Sodium ctx(key);
+
+    unsigned long long start = rdtsc();
+    ctx.encrypt_inplace(buffer, nonce);
+    unsigned long long end = rdtsc();
+
+    size_t bytes = buffer.size();
+    std::cout << "AES-Sodium cycles total: " << (end - start) << "\n";
+    std::cout << "AES-Sodium cycles per byte: " << double(end - start) / bytes << "\n";
+}
+
 int main() {
-    const size_t BUFFER_SIZE = 1024 * 1024; // 1 MB buffer
+    const size_t BUFFER_SIZE = 1024 * 1024 * 32; // 32 MB buffer
     std::vector<uint8_t> buffer(BUFFER_SIZE);
 
     std::random_device rd;
@@ -62,7 +103,22 @@ int main() {
     // refill buffer for fair comparison
     for (auto &b : buffer) b = rd() % 256;
 
+    benchmark_aes_sodium(buffer, chacha_key, chacha_nonce);
+
+    // refill buffer for fair comparison
+    for (auto &b : buffer) b = rd() % 256;
+
     benchmark_chacha20(buffer, chacha_key, chacha_nonce);
+
+    // refill buffer for fair comparison
+    for (auto &b : buffer) b = rd() % 256;
+
+    benchmark_chacha20_sodium(buffer, chacha_key, chacha_nonce);
+
+    // refill buffer for fair comparison
+    for (auto &b : buffer) b = rd() % 256;
+
+    benchmark_chacha20_poly1305(buffer, chacha_key, chacha_nonce);
 
     return 0;
 }
